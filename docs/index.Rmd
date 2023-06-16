@@ -1,0 +1,107 @@
+---
+title: "20230505作业"
+author: "Lin,Xiaohe"
+date: "2023-05-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = F,message = F)
+```
+## 载入依赖包
+```{r}
+library(MASS)
+library(relaimpo)
+library(car)
+```
+
+## 数据读取与转化
+```{r}
+acute_data <- read.csv('Ceriodaphnia_dubia_acute_data.csv',header = T)
+acute_data$ln_DOC <- log(acute_data$DOC)
+acute_data$ln_Hardness <- log(acute_data$Hardness)
+acute_data$ln_Observed_Acute_EC50s <- log(acute_data$Observed_Acute_EC50s)
+N <- log(length(acute_data$Species))
+```
+
+## 无交互作用模型的建立与比较 
+```{r}
+mod.1 <- lm(ln_Observed_Acute_EC50s~ln_DOC+ln_Hardness+pH,data = acute_data)
+AIC_mod <- stepAIC(mod.1,direction = c('both'),k = 2)
+BIC_mod <- stepAIC(mod.1,direction = c('both'),k = N)
+
+# 我们发现去除ln_Hardness项后AIC和BIC值更小
+# 因此选择模型 ln_Observed_Acute_EC50s ~ ln_DOC + pH
+mod.1 <- lm(ln_Observed_Acute_EC50s~ln_DOC+pH,data = acute_data)
+summary(mod.1)
+```
+结果解读：
+
+* log(DOC)对急性EC50有显著影响，若控制pH不变，log(DOC)每升高1mg/L，log(EC50)增加0.62507
+
+* pH对急性EC50有显著影响，若控制DOC不变，pH每升高1，log(EC50)增加0.86985
+
+* 截距为-3.85，含义是当log(DOC)和pH等于0时，log(EC50)为-3.84786
+
+* R-squared等于0.6365，表明log(DOC)和pH一起可以解释63.65%的log(EC50)变异
+
+```{r}
+# 我们进一步分析各解释变量的相对贡献
+calc.relimp(mod.1)
+```
+结果解读：
+
+* log(DOC)和pH一起可以解释63.65%的log(EC50)变异
+
+* 其中，log(DOC)贡献了其中的44.50%，pH贡献了其中的19.150%
+
+## 无交互作用模型的诊断
+```{r}
+# 残差略有非线性，识别出异常点35,77和82
+plot(mod.1, which=1)
+# 图上残差大多落在对角线上，比较符合正态分布，识别出异常点35,77和82
+plot(mod.1, which=2)
+# 模型的残差存在异方差性，识别出异常点35,77和82
+plot(mod.1, which=3)
+# 图上显示cook's distance均小于1，说明无高影响点
+plot(mod.1, which=4)
+# 图中显示66、67和82具有较高的杠杆值
+plot(mod.1, which=5)
+# 图中显示66、67和82为离群值
+plot(mod.1, which=6)
+# 图中可以看出，离群点为66，77，82为离群点，66，68，69有高杠杆值，82，77和66可能为强影响值。
+influencePlot(mod.1)
+```
+后续改进可以根据情况选择去掉其中的几个数据如66，77和82等，或者进一步完善模型，如通过增加交互作用项。
+
+
+## 有交互作用项模型的建立与比较 
+```{r}
+mod.2 <- lm(ln_Observed_Acute_EC50s~ln_DOC+ln_Hardness+pH+ln_DOC:ln_Hardness+ln_DOC:pH+ln_Hardness:pH,data = acute_data)
+# 根据AIC，我们发现模型ln_Observed_Acute_EC50s ~ ln_DOC + ln_Hardness + pH + ln_DOC:pH + ln_Hardness:pH为最优模型
+AIC_mod <- stepAIC(mod.2,direction = c('both'), k = 2)
+# 根据BIC，我们发现模型ln_Observed_Acute_EC50s ~ ln_DOC + pH + ln_DOC:pH为最优模型
+BIC_mod <- stepAIC(mod.2,direction = c('both'), k = N)
+
+mod.AIC <- lm(ln_Observed_Acute_EC50s ~ ln_DOC + ln_Hardness + pH + ln_DOC:pH + ln_Hardness:pH,data = acute_data)
+summary(mod.AIC)
+
+mod.BIC <- lm(ln_Observed_Acute_EC50s ~ ln_DOC + pH + ln_DOC:pH,data = acute_data)
+summary(mod.BIC)
+anova(mod.AIC,mod.BIC)
+AIC(mod.AIC)
+AIC(mod.BIC)
+BIC(mod.AIC)
+BIC(mod.BIC)
+```
+结果解读：
+
+* 根据AIC模型，log(DOC),及log(DOC)和pH的交互作用均对急性EC50有显著影响，其R-squared为0.7835，即解释率为78.35%
+
+* 根据BIC模型，log(DOC),pH及其交互作用均对急性EC50有显著影响，其R-squared为0.7766，即解释率为77.66%
+
+* 通过Anova比较两个模型，两个模型的解释能力并没有显著差异
+
+* 通过计算AIC和BIC比较，mod.AIC的AIC值较小，mod.BIC的BIC值较小。
+
+
